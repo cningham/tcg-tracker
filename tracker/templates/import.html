@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Import from Collectr</h2>
+{% if not rows %}
+<div class="panel">
+  <p>In Collectr, export your collection or watchlist as a CSV file, then pick it here.
+  Nothing is added until you tick cards and give them a max price on the next screen.</p>
+  <form class="row" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv,text/csv" required>
+    <button>Read file</button>
+  </form>
+</div>
+{% else %}
+<div class="panel">
+  <p class="muted">Columns found: {{ headers|join(", ") }}.<br>
+  Using: name = <b>{{ mapping.name or "?" }}</b>, game = <b>{{ mapping.game or "-" }}</b>,
+  set = <b>{{ mapping.set_name or "-" }}</b>, number = <b>{{ mapping.number or "-" }}</b>,
+  price = <b>{{ mapping.market_price or "-" }}</b>.</p>
+  <form method="post" action="/import/confirm">
+    <input type="hidden" name="rows_json" value="{{ rows_json }}">
+    <table>
+      <tr><th>Watch</th><th>Card</th><th>Condition</th><th>Market</th><th>eBay search</th><th>Max £</th></tr>
+      {% for r in rows %}
+      <tr>
+        <td><input type="checkbox" name="pick_{{ loop.index0 }}"></td>
+        <td><b>{{ r.name }}</b><div class="muted">{{ r.game }}{% if r.set_name %} · {{ r.set_name }}{% endif %}{% if r.number %} · #{{ r.number }}{% endif %}</div></td>
+        <td class="muted">{{ r.condition }}</td>
+        <td>{{ "%.2f"|format(r.market_price) if r.market_price is not none else "" }}</td>
+        <td><input type="text" name="query_{{ loop.index0 }}" value="{{ r.query }}" style="width:220px"></td>
+        <td><input type="number" step="0.01" name="max_{{ loop.index0 }}" style="width:90px"
+             {% if r.market_price %}placeholder="{{ '%.2f'|format(r.market_price) }}"{% endif %}></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p><button>Add ticked cards</button></p>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

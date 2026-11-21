@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCG Tracker</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e3e6eb;
+          --accent:#2f6fec; --ok:#12804a; --warn:#b54708; --bad:#c01048; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b2029; --ink:#e7eaf0; --muted:#9aa3b2; --line:#2c3340;
+            --accent:#6b9bff; --ok:#4cc38a; --warn:#f5a524; --bad:#ff6b8e; }
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, "Segoe UI", sans-serif }
+  main { max-width:1150px; margin:0 auto; padding:20px 16px 60px }
+  h1 { font-size:22px; margin:0 0 4px } h2 { font-size:16px; margin:28px 0 10px }
+  a { color:var(--accent) }
+  .muted { color:var(--muted) } .ok { color:var(--ok) } .warn { color:var(--warn) } .bad { color:var(--bad) }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; overflow-x:auto }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  input[type=text], input[type=number], select { padding:6px 8px; border:1px solid var(--line); border-radius:6px;
+          background:var(--bg); color:var(--ink); font:inherit; min-width:0 }
+  button, .btn { padding:6px 12px; border:1px solid var(--accent); background:var(--accent); color:#fff;
+          border-radius:6px; font:inherit; cursor:pointer; text-decoration:none }
+  button.ghost { background:transparent; color:var(--accent) } button.danger { background:transparent; border-color:var(--bad); color:var(--bad) }
+  table { width:100%; border-collapse:collapse } th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); vertical-align:middle }
+  th { font-weight:600; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.03em }
+  .flash { background:var(--card); border-left:4px solid var(--accent); padding:8px 12px; margin:10px 0; border-radius:6px }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; border:1px solid var(--line); font-size:12px }
+  img.thumb { width:40px; height:40px; object-fit:cover; border-radius:4px }
+</style>
+</head>
+<body><main>
+  <div class="row" style="justify-content:space-between">
+    <div><h1><a href="/" style="color:inherit;text-decoration:none">TCG Tracker</a></h1>
+    <div class="muted">Watches eBay for raw cards under your max price.</div></div>
+    <div class="row"><a class="btn" href="/import">Import from Collectr</a></div>
+  </div>
+  {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% block body %}{% endblock %}
+</main></body></html>

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Status</h2>
+<div class="panel row" style="gap:18px">
+  <span>eBay keys: {% if ebay_ready %}<b class="ok">set</b>{% else %}<b class="bad">missing, add them to .env</b>{% endif %}</span>
+  <span>Alerts: {% if channels %}<b class="ok">{{ channels|join(" + ") }}</b>{% else %}<b class="warn">none set up (matches only show here)</b>{% endif %}</span>
+  <span>Checks every {{ cfg.CHECK_EVERY_MINUTES }} min · auctions alerted with ≤{{ cfg.AUCTION_WINDOW_MINUTES }} min left · {{ cfg.EBAY_MARKETPLACE }} / {{ cfg.EBAY_CURRENCY }}</span>
+  <span class="{{ 'bad' if calls > 5000 else 'muted' }}">~{{ calls }} eBay calls/day (free limit 5,000)</span>
+  <form method="post" action="/check"><button>Check now</button></form>
+  <form method="post" action="/test-alert"><button class="ghost">Send test alert</button></form>
+</div>
+
+<h2>Watched cards</h2>
+<div class="panel">
+{% if cards %}
+<table>
+  <tr><th>Card</th><th>eBay search</th><th>Max £ (incl. postage)</th><th>Title must have</th><th>Title must not have</th><th>Auctions</th><th>On</th><th>Last check</th><th></th></tr>
+  {% for c in cards %}
+  <tr>
+    <form method="post" action="/cards/{{ c.id }}" id="f{{ c.id }}"></form>
+    <td><b>{{ c.name }}</b><div class="muted">{{ c.game }}{% if c.set_name %} · {{ c.set_name }}{% endif %}{% if c.number %} · #{{ c.number }}{% endif %}{% if c.market_price %} · mkt {{ "%.2f"|format(c.market_price) }}{% endif %}</div></td>
+    <td><input form="f{{ c.id }}" type="text" name="query" value="{{ c.query }}" style="width:190px"></td>
+    <td><input form="f{{ c.id }}" type="number" step="0.01" name="max_price" value="{{ '%.2f'|format(c.max_price) }}" style="width:90px"></td>
+    <td><input form="f{{ c.id }}" type="text" name="must_include" value="{{ c.must_include }}" placeholder="e.g. 199/165" style="width:110px"></td>
+    <td><input form="f{{ c.id }}" type="text" name="exclude" value="{{ c.exclude }}" placeholder="e.g. japanese" style="width:110px"></td>
+    <td><input form="f{{ c.id }}" type="checkbox" name="include_auctions" {% if c.include_auctions %}checked{% endif %}></td>
+    <td><input form="f{{ c.id }}" type="checkbox" name="enabled" {% if c.enabled %}checked{% endif %}></td>
+    <td class="muted">{{ (c.last_checked or "never")[:16]|replace("T", " ") }}{% if c.last_error %}<div class="bad" title="{{ c.last_error }}">error: {{ c.last_error[:60] }}</div>{% endif %}</td>
+    <td><div class="row" style="flex-wrap:nowrap">
+      <button form="f{{ c.id }}">Save</button>
+      <form method="post" action="/cards/{{ c.id }}/delete" onsubmit="return confirm('Stop watching this card?')"><button class="danger">✕</button></form>
+    </div></td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="muted">Search uses eBay keywords (all words must match). "Must have" / "must not have" are comma-separated and checked against the listing title. Graded slabs are always skipped.</p>
+{% else %}
+<p class="muted">No cards yet. Add one below or import from Collectr.</p>
+{% endif %}
+</div>
+
+<h2>Add a card</h2>
+<form class="panel row" method="post" action="/cards">
+  <select name="game"><option>Pokemon</option><option>Cyberpunk</option><option value="">Other</option></select>
+  <input type="text" name="name" placeholder="Card name, e.g. Charizard ex" required style="width:200px">
+  <input type="text" name="number" placeholder="Number, e.g. 199/165" style="width:120px">
+  <input type="text" name="query" placeholder="eBay search (optional)" style="width:180px">
+  <input type="number" step="0.01" name="max_price" placeholder="Max £" required style="width:90px">
+  <input type="text" name="must_include" placeholder="Title must have" style="width:120px">
+  <input type="text" name="exclude" placeholder="Title must not have" style="width:130px">
+  <label><input type="checkbox" name="include_auctions" checked> auctions</label>
+  <button>Watch</button>
+</form>
+
+<h2>Recent matches</h2>
+<div class="panel">
+{% if matches %}
+<table>
+  <tr><th></th><th>Found</th><th>Card</th><th>Listing</th><th>Type</th><th>Total</th></tr>
+  {% for m in matches %}
+  <tr>
+    <td>{% if m.image %}<img class="thumb" src="{{ m.image }}" alt="">{% endif %}</td>
+    <td class="muted">{{ m.found_at[:16]|replace("T", " ") }}</td>
+    <td>{{ m.card_name }}</td>
+    <td><a href="{{ m.url }}" target="_blank" rel="noopener">{{ m.title }}</a></td>
+    <td><span class="pill">{{ "Auction" if m.kind == "AUCTION" else "Buy It Now" }}</span></td>
+    <td><b>{{ "%.2f"|format(m.total) }}</b> <span class="muted">/ {{ "%.2f"|format(m.max_price) }}</span></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</div>
+{% endblock %}
