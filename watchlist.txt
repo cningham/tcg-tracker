@@ -11,3 +11,4 @@
 # Johnny Silverhand | 8 | bin-only
 Dum Dum - Maelstrom Triggerman (ILegend) 145 Retail | 25
 Adam Smasher - Metal Over Meat (IO) 160 retail | 20
+scyther 016 Japanese | 35 | must: 016/087
