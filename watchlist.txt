@@ -9,3 +9,4 @@
 # Lines starting with # are ignored. Examples:
 # Charizard ex 199 | 50 | must: 199/165 | not: japanese
 # Johnny Silverhand | 8 | bin-only
+Dum Dum - Maelstrom Triggerman (ILegend) 145 Retail | 25
