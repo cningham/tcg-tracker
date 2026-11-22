@@ -10,3 +10,4 @@
 # Charizard ex 199 | 50 | must: 199/165 | not: japanese
 # Johnny Silverhand | 8 | bin-only
 Dum Dum - Maelstrom Triggerman (ILegend) 145 Retail | 25
+Adam Smasher - Metal Over Meat (IO) 160 retail | 20
