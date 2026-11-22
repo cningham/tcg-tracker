@@ -28,6 +28,7 @@ HELP = (
     "Commands:\n"
     "/add Charizard ex 199/165 50  (watch a card, max £50 incl. postage)\n"
     "/list  (show your cards)\n"
+    "/market 2  (10 cheapest eBay listings for card 2, any price; or /market + a name or Collectr link)\n"
     "/remove 2  (stop watching card 2)\n"
     "/price 2 45  (change card 2's max to £45)\n\n"
     "Add 'bin' at the end of /add to skip auctions, e.g. /add Pikachu 025/165 12 bin"
@@ -52,6 +53,7 @@ def register_commands():
     _api("setMyCommands", commands=[
         {"command": "add", "description": "Watch a card: /add Charizard ex 199/165 50"},
         {"command": "list", "description": "Show your cards"},
+        {"command": "market", "description": "Cheapest listings now: /market 2 or /market Scyther 003/106"},
         {"command": "remove", "description": "Stop watching a card: /remove 2"},
         {"command": "price", "description": "Change a max price: /price 2 45"},
         {"command": "help", "description": "How to use me"},
@@ -304,6 +306,74 @@ def preview(ebay, line):
     return f"\nRight now on eBay: {len(ok)}{more} Buy It Now listing(s), cheapest £{cheapest:.2f} with postage."
 
 
+def _left(ends_at):
+    from datetime import datetime, timezone
+    try:
+        end = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return ""
+    mins = max(0, int((end - datetime.now(timezone.utc)).total_seconds() // 60))
+    if mins >= 1440:
+        return f"{mins // 1440}d {mins % 1440 // 60}h left"
+    if mins >= 60:
+        return f"{mins // 60}h {mins % 60}m left"
+    return f"{mins}m left"
+
+
+def market(ebay, arg, lines):
+    """/market: the cheapest current listings for a card, at any price."""
+    from . import checker
+    from .cloud import parse_watchlist
+    arg = (arg or "").strip()
+    if not arg:
+        return ("Which card? Send /market 2 for card 2 on your /list, "
+                "or /market Charizard ex 199/165, or share a Collectr link after /market.")
+    idx = card_lines(lines)
+    if arg.isdigit() and 1 <= int(arg) <= len(idx):
+        line = lines[idx[int(arg) - 1]]
+    else:
+        link = URL.search(arg)
+        name = name_from_link(link.group(0)) if link else arg
+        if not name:
+            return "I couldn't read the card name from that link. Try /market followed by the card name."
+        line, err = line_for_add(f"{name} 1")
+        if err:
+            return err
+    cards, _ = parse_watchlist(line)
+    card = dict(cards[0], max_price=10**6)
+    query = search_words(card["query"])
+    found = []
+    for kind in ("FIXED_PRICE", "AUCTION"):
+        try:
+            found += ebay.search(query, 10**6, kind=kind, limit=100, sort="price")
+        except Exception as e:
+            log.warning("market search failed: %s", type(e).__name__)
+            return "Sorry, eBay didn't answer. Try again in a minute."
+    found = [m for m in found if not checker.reject_reason(card, m)]
+    seen, unique = set(), []
+    for m in sorted(found, key=lambda m: m["total"]):
+        if m["item_id"] not in seen:
+            seen.add(m["item_id"])
+            unique.append(m)
+    if not unique:
+        return (f"No raw listings on eBay for \"{query}\" right now.\n"
+                "If that seems wrong, try a shorter name, e.g. /market Scyther 003/106")
+    head = (f"eBay now for \"{query}\": {len(unique)} listing(s)"
+            + (", 10 cheapest:" if len(unique) > 10 else ":"))
+    rows = []
+    for n, m in enumerate(unique[:10], 1):
+        post = "" if m["postage"] is None else (" free post" if m["postage"] == 0 else f" incl. £{m['postage']:.2f} post")
+        if m["kind"] == "AUCTION":
+            bids = f", {m['bids']} bids" if m.get("bids") is not None else ""
+            what = f"auction, {_left(m.get('ends_at'))}{bids}"
+        else:
+            what = "Buy It Now"
+        title = m["title"] if len(m["title"]) <= 70 else m["title"][:67] + "..."
+        rows.append(f"{n}. £{m['total']:.2f}{post} · {what}\n    {title}")
+    note = "\n\nTotals include postage to the UK. Graded slabs are left out."
+    return head + "\n" + "\n".join(rows) + note
+
+
 class Bot:
     def __init__(self, path="watchlist.txt", ebay=None, state_path="state/bot.json"):
         self.path = path
@@ -338,6 +408,11 @@ class Bot:
             text = msg.get("text", "")
             try:
                 before = read_lines(self.path)
+                cmd, _, arg = text.strip().partition(" ")
+                if cmd.lower().split("@")[0] in ("/market", "/m", "/prices"):
+                    self.state.pop("pending", None)
+                    reply(market(self.ebay, arg, before) if self.ebay else "eBay isn't connected.")
+                    continue
                 answer, new_lines = handle(text, before, self.state)
                 self._save_state()
                 if new_lines is not None:

@@ -34,6 +34,7 @@ Message your bot:
 - **Share a card from Collectr** to the bot, then reply with your max price (e.g. `25`). Or add the price straight after the link.
 - `/add Charizard ex 199/165 50` watches Charizard ex 199/165 for up to £50 including postage. Add `bin` at the end to skip auctions.
 - `/list` shows your cards with numbers.
+- `/market 2` shows the 10 cheapest eBay listings for card 2 right now, at any price. You can also use `/market Scyther 003/106` or `/market` plus a Collectr link.
 - `/remove 2` stops watching card 2.
 - `/price 2 45` changes card 2's max to £45.
 

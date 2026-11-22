@@ -49,7 +49,7 @@ class Ebay:
         return self._token
 
     # -- search -----------------------------------------------------------
-    def search(self, query, max_price, kind="FIXED_PRICE", ending_within_minutes=None, limit=50):
+    def search(self, query, max_price, kind="FIXED_PRICE", ending_within_minutes=None, limit=50, sort=None):
         """Return a list of normalised listings under max_price (item price only;
         postage is added afterwards by the checker)."""
         filters = [
@@ -68,7 +68,7 @@ class Ebay:
         params = {
             "q": query,
             "filter": ",".join(filters),
-            "sort": "endingSoonest" if kind == "AUCTION" else "price",
+            "sort": sort or ("endingSoonest" if kind == "AUCTION" else "price"),
             "limit": str(limit),
         }
         if config.EBAY_CATEGORY_ID:
