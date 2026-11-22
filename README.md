@@ -13,7 +13,7 @@ when one is listed under your max price (price + postage). Runs free on GitHub A
 The tracker runs on GitHub Actions. In a **public** repo this is free with no minute limit.
 Only the code is public: your watchlist, keys and alerts stay private, and the run logs only show counts.
 
-Checks happen every 5 minutes. GitHub sometimes starts scheduled runs late, so expect the odd gap of 5 to 15 minutes.
+Checks happen every 5 minutes, around the clock: each run lasts about 28 minutes and then starts the next one.
 
 ### 1. Get the keys
 - **eBay:** at https://developer.ebay.com, create a **Production** keyset and copy the App ID (Client ID) and Cert ID (Client Secret).
