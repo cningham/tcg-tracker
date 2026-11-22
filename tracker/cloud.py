@@ -25,6 +25,7 @@ import os
 import time
 from pathlib import Path
 
+from . import bot as tgbot
 from . import checker, config, notify
 from .ebay import Ebay
 
@@ -138,6 +139,7 @@ def hello(cards, problems):
             lines.append(f"- {c['query']}: up to £{c['max_price']:.2f}{extra}")
     else:
         lines.append("No cards in the watchlist yet.")
+    lines.append("To add a card, send me e.g.: /add Charizard ex 199/165 50\nSend /help for all commands.")
     for prob in problems:
         lines.append(f"Watchlist problem, {prob}")
     res = notify.send("Tracker is set up", "\n".join(lines))
@@ -165,14 +167,21 @@ def main(argv=None):
     # Keep third-party libraries from logging URLs (which can contain tokens).
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+    bot = tgbot.Bot(args.watchlist)
+    if not args.hello:
+        bot.poll(0)  # apply any commands sent while no run was active
+
     cards, problems = parse_watchlist(load_watchlist_text(args.watchlist))
     for prob in problems:
         log.warning("watchlist %s", prob)
     if args.hello:
         hello(cards, problems)
-    if not cards:
-        log.info("Watchlist is empty, nothing to check.")
-        return
+        try:
+            tgbot.register_commands()
+        except Exception as e:
+            log.warning("Couldn't set Telegram command menu: %s", type(e).__name__)
+        bot.poll(0)
+        cards, _ = parse_watchlist(load_watchlist_text(args.watchlist))
     if not notify.channels():
         log.warning("No alert channel configured (Telegram or email secrets).")
 
@@ -183,15 +192,27 @@ def main(argv=None):
     passes = 0
     while True:
         started = time.time()
-        alerts, errors = check_all(ebay, cards, seen)
-        save_seen(args.seen, seen)
-        passes += 1
-        log.info("pass %d: %d card(s), %d alert(s), %d error(s)", passes, len(cards), alerts, errors)
+        if cards:
+            alerts, errors = check_all(ebay, cards, seen)
+            save_seen(args.seen, seen)
+            passes += 1
+            log.info("pass %d: %d card(s), %d alert(s), %d error(s)", passes, len(cards), alerts, errors)
+        else:
+            log.info("Watchlist is empty, nothing to check.")
         next_at = started + args.every * 60
         if next_at >= deadline:
             break
-        time.sleep(max(0, next_at - time.time()))
-
+        # Between eBay checks, listen for Telegram commands.
+        while time.time() < next_at:
+            if bot.poll(next_at - time.time()):
+                old_keys = {c["key"] for c in cards}
+                cards, _ = parse_watchlist(load_watchlist_text(args.watchlist))
+                fresh = [c for c in cards if c["key"] not in old_keys]
+                if fresh:  # check newly added cards straight away
+                    check_all(ebay, fresh, seen)
+                    save_seen(args.seen, seen)
+            elif not tgbot.enabled():
+                time.sleep(max(0, next_at - time.time()))
 
 if __name__ == "__main__":
     main()

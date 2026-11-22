@@ -28,22 +28,17 @@ In the repo, go to **Settings → Secrets and variables → Actions**.
 **Secrets** tab, **New repository secret** for each one you use:
 `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_TO`
 
-### 3. Your watchlist
-Edit **`watchlist.txt`** in the repo (pencil icon on GitHub, works from the phone app too). One card per line:
+### 3. Your watchlist (from Telegram)
+Message your bot:
 
-```
-Charizard ex 199 | 50 | must: 199/165 | not: japanese, jumbo
-Pikachu 025 151 | 12.50
-Johnny Silverhand | 8 | bin-only
-```
+- `/add Charizard ex 199/165 50` watches Charizard ex 199/165 for up to £50 including postage. Add `bin` at the end to skip auctions.
+- `/list` shows your cards with numbers.
+- `/remove 2` stops watching card 2.
+- `/price 2 45` changes card 2's max to £45.
 
-Each line is `eBay search words | max £ including postage | options`. The options are:
-- `must: a, b`: the listing title must contain all of these (great for card numbers like `199/165`).
-- `not: x, y`: skip titles containing any of these.
-- `bin-only`: ignore auctions for this card.
-
-Every time you save it, you get a Telegram message listing what's being watched.
-Note the file is public. To keep the list private, put the same text in a `WATCHLIST` secret instead; it takes priority over the file.
+The bot answers within a few seconds while a check is running, which is most of the time. Otherwise it answers within about 30 minutes.
+Changes are saved to `watchlist.txt` in the repo, which you can also edit by hand (format: `search words | max £ | must: 199/165 | not: japanese | bin-only`).
+Note the file is public. To keep the list private, put the same text in a `WATCHLIST` secret instead. It takes priority over the file, and the bot can't change it.
 
 ### 4. Check it works
 Go to the **Actions** tab, enable workflows if asked, open **Watch eBay**, and press **Run workflow**.
