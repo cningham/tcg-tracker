@@ -56,6 +56,8 @@ def parse_watchlist(text):
                 card["must_include"] = val.strip()
             elif key in ("not", "exclude", "must not"):
                 card["exclude"] = val.strip()
+            elif key == "collectr":
+                card["collectr"] = val.strip()
             elif key in ("bin-only", "bin only", "no auctions"):
                 card["include_auctions"] = False
             elif opt:

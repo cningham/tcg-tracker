@@ -151,20 +151,41 @@ def _clean_title(t):
     return t
 
 
-def name_from_link(url):
-    """Best guess at the card name behind a shared link (e.g. from Collectr)."""
-    final_url = url
+_SYM = {"GBP": "£", "USD": "$", "EUR": "€"}
+
+
+def _page_price(page):
+    """Market price shown on a shared page, as text like '£12.34', or ''."""
+    amt = _meta(page, "product:price:amount", "og:price:amount")
+    if amt:
+        cur = _meta(page, "product:price:currency", "og:price:currency").upper()
+        return f"{_SYM.get(cur, cur + ' ' if cur else '')}{amt}"
+    m = re.search(r'"(?:marketPrice|market_price|currentPrice|price)"\s*:\s*"?(\d+(?:\.\d+)?)', page)
+    if m:
+        cur = re.search(r'"(?:priceCurrency|currency)"\s*:\s*"([A-Z]{3})"', page)
+        return f"{_SYM.get(cur.group(1), cur.group(1) + ' ') if cur else ''}{float(m.group(1)):.2f}"
+    desc = _meta(page, "og:description", "description", "twitter:description")
+    m = re.search(r"([£$€])\s?(\d[\d,]*(?:\.\d{1,2})?)", desc)
+    return f"{m.group(1)}{m.group(2)}" if m else ""
+
+
+def read_link(url):
+    """(card name, price text) for a shared link, e.g. from Collectr."""
+    final_url, name, price = url, "", ""
     try:
         r = requests.get(url, headers={"User-Agent": UA}, timeout=15, allow_redirects=True)
         final_url = r.url
         page = r.text[:400000]
-        log.info("link fetch: status %s, %d bytes", r.status_code, len(page))
+        price = _page_price(page)
+        log.info("link fetch: status %s, %d bytes, price %s, description: %s", r.status_code, len(page),
+                 "found" if price else "not found",
+                 _meta(page, "og:description", "description")[:160])
         for cand in (_meta(page, "og:title", "twitter:title"),
                      *re.findall(r'"@type"\s*:\s*"Product".{0,400}?"name"\s*:\s*"([^"]+)"', page, re.S)[:1],
                      *(re.findall(r"<title[^>]*>(.*?)</title>", page, re.S | re.I)[:1])):
             name = _clean_title(cand)
             if name:
-                return name
+                return name, price
     except Exception as e:
         log.info("link fetch failed: %s", type(e).__name__)
     # Fall back to the words in the link itself, e.g. /product/charizard-ex-199-165
@@ -174,8 +195,12 @@ def name_from_link(url):
         if re.search(r"[a-zA-Z]{3,}", seg) and not re.fullmatch(r"[0-9a-f-]{20,}", seg):
             if seg.lower() in ("product", "products", "explore", "card", "cards", "item", "portfolio"):
                 continue
-            return re.sub(r"[-_]+", " ", seg).strip()
-    return ""
+            return re.sub(r"[-_]+", " ", seg).strip(), price
+    return "", price
+
+
+def name_from_link(url):
+    return read_link(url)[0]
 
 
 def _price_from(text):
@@ -186,7 +211,7 @@ def _price_from(text):
 def describe(line):
     parts = [p.strip() for p in line.split("|")]
     text = f"{parts[0]}: up to £{float(parts[1]):.2f}" if len(parts) > 1 else line
-    extras = [p for p in parts[2:] if p]
+    extras = [p for p in parts[2:] if p and not p.lower().startswith("collectr:")]
     return text + (f" ({', '.join(extras)})" if extras else "")
 
 
@@ -204,17 +229,34 @@ def handle(text, lines, state=None):
         price = _price_from(rest.split()[-1]) if rest.split() else None
         if price is not None:
             rest = " ".join(rest.split()[:-1])
-        name = name_from_link(url) or re.sub(r"(?i)check out|on collectr|collectr|!", " ", rest).strip()
+        name, page_price = read_link(url)
+        name = name or re.sub(r"(?i)check out|on collectr|collectr|!", " ", rest).strip()
         if not name:
             return ("I couldn't read the card name from that link. Send it like "
                     "/add Charizard ex 199/165 50 instead."), None
+        shown = f" (Collectr price {page_price})" if page_price else ""
+        # Already watching this card? Attach the link (and new price) to it.
+        new_line, _ = line_for_add(f"{name} 1")
+        lines = list(lines)
+        for n, i in enumerate(card_lines(lines), 1):
+            parts = [p.strip() for p in lines[i].split("|")]
+            if new_line and parts[0].lower() == new_line.split("|")[0].strip().lower():
+                parts = [p for p in parts if not p.lower().startswith("collectr:")] + [f"collectr: {url}"]
+                if price is not None:
+                    parts[1] = f"{price:g}"
+                lines[i] = " | ".join(parts)
+                return f"Card {n} is already on your list, I've linked it to Collectr{shown}: {describe(lines[i])}", lines
         if price is None:
-            state["pending"] = name
-            return (f"Found: {name}\nWhat's the most you'd pay, postage included? "
+            state["pending"] = {"name": name, "url": url}
+            return (f"Found: {name}{shown}\nWhat's the most you'd pay, postage included? "
                     "Reply with just the number, e.g. 25"), None
+        state["pending"] = {"name": name, "url": url}
         text = f"/add {name} {price:g}"
     elif state.get("pending") and _price_from(text) is not None:
-        text = f"/add {state.pop('pending')} {_price_from(text):g}"
+        p = state["pending"]
+        p = p if isinstance(p, dict) else {"name": p, "url": ""}
+        state["pending"] = p
+        text = f"/add {p['name']} {_price_from(text):g}"
 
     cmd, _, rest = text.partition(" ")
     cmd = cmd.lower().split("@")[0]
@@ -222,10 +264,12 @@ def handle(text, lines, state=None):
     idx = card_lines(lines)
 
     if cmd == "/add":
-        state.pop("pending", None)
+        pending = state.pop("pending", None)
         line, err = line_for_add(rest)
         if err:
             return err, None
+        if isinstance(pending, dict) and pending.get("url") and rest.startswith(pending["name"]):
+            line += f" | collectr: {pending['url']}"
         lines.append(line)
         return f"Added card {len(idx) + 1}: {describe(line)}\nI'll message you when one is listed under that price.", lines
 
@@ -331,11 +375,18 @@ def market(ebay, arg, lines):
         return ("Which card? Send /market 2 for card 2 on your /list, "
                 "or /market Charizard ex 199/165, or share a Collectr link after /market.")
     idx = card_lines(lines)
+    top = ""  # price line shown above the list
     if arg.isdigit() and 1 <= int(arg) <= len(idx):
         line = lines[idx[int(arg) - 1]]
+        watched, _ = parse_watchlist(line)
+        link_price = read_link(watched[0]["collectr"])[1] if watched and watched[0].get("collectr") else ""
+        top = (f"Collectr price: {link_price}" if link_price
+               else f"Your max price: £{watched[0]['max_price']:.2f}" if watched else "")
     else:
         link = URL.search(arg)
-        name = name_from_link(link.group(0)) if link else arg
+        name, link_price = read_link(link.group(0)) if link else (arg, "")
+        if link_price:
+            top = f"Collectr price: {link_price}"
         if not name:
             return "I couldn't read the card name from that link. Try /market followed by the card name."
         line, err = line_for_add(f"{name} 1")
@@ -359,10 +410,12 @@ def market(ebay, arg, lines):
             unique.append(m)
     from html import escape
     if not unique:
-        return escape(f"No raw listings on eBay for \"{query}\" right now.\n"
+        return escape((f"{top}\n\n" if top else "") + f"No raw listings on eBay for \"{query}\" right now.\n"
                       "If that seems wrong, try a shorter name, e.g. /market Scyther 003/106")
     head = (f"eBay now for \"{query}\": {len(unique)} listing(s)"
             + (", 10 cheapest:" if len(unique) > 10 else ":"))
+    if top:
+        head = f"{top}\n\n{head}"
     rows = []
     for n, m in enumerate(unique[:10], 1):
         post = "" if m["postage"] is None else (" free post" if m["postage"] == 0 else f" incl. £{m['postage']:.2f} post")
