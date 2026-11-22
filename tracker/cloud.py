@@ -1,7 +1,7 @@
 """Cloud mode: run from GitHub Actions, no database, no web page.
 
-The watchlist comes from the WATCHLIST environment variable (a GitHub Actions
-repository variable, so it is not public). One card per line:
+The watchlist comes from watchlist.txt (or a WATCHLIST secret, which wins
+if set and keeps the list private). One card per line:
 
     Charizard ex 199 | 50 | must: 199/165 | not: japanese, jumbo
     Pikachu 025 151  | 12.50
@@ -21,6 +21,7 @@ prices or listing titles.
 import argparse
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -103,6 +104,46 @@ def check_all(ebay, cards, seen):
     return alerts, errors
 
 
+def load_watchlist_text(path="watchlist.txt"):
+    """The WATCHLIST secret wins if set; otherwise watchlist.txt in the repo."""
+    text = os.environ.get("WATCHLIST", "").strip()
+    if text:
+        return text
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def hello(cards, problems):
+    """Confirm the setup works: test eBay, then send a Telegram/email summary."""
+    lines = ["TCG Tracker check-in."]
+    ok = True
+    try:
+        Ebay()._get_token()
+        lines.append("eBay connection: OK")
+    except Exception as e:
+        ok = False
+        lines.append(f"eBay connection: FAILED ({e})"[:300])
+    if cards:
+        lines.append(f"Watching {len(cards)} card(s):")
+        for c in cards:
+            extra = "" if c["include_auctions"] else " (Buy It Now only)"
+            lines.append(f"- {c['query']}: up to £{c['max_price']:.2f}{extra}")
+    else:
+        lines.append("No cards in the watchlist yet.")
+    for prob in problems:
+        lines.append(f"Watchlist problem, {prob}")
+    res = notify.send("Tracker is set up", "\n".join(lines))
+    for ch, err in res:
+        log.info("%s: %s", ch, "sent" if err is None else f"FAILED: {err[:200]}")
+    if not res:
+        log.error("No alert channel: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID secrets.")
+    log.info("eBay connection: %s", "OK" if ok else "FAILED (check EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)")
+    if not ok or not res or any(err for _, err in res):
+        raise SystemExit(1)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--minutes", type=float, default=0,
@@ -110,26 +151,22 @@ def main(argv=None):
     p.add_argument("--every", type=float, default=config.CHECK_EVERY_MINUTES,
                    help="minutes between checks")
     p.add_argument("--seen", default="state/seen.json")
-    p.add_argument("--test-alert", action="store_true")
+    p.add_argument("--watchlist", default="watchlist.txt")
+    p.add_argument("--hello", action="store_true",
+                   help="send a setup confirmation, then check once")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     # Keep third-party libraries from logging URLs (which can contain tokens).
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    if args.test_alert:
-        res = notify.send("Test alert", "TCG Tracker test alert from GitHub Actions. Alerts work.")
-        for ch, err in res:
-            log.info("%s: %s", ch, "sent" if err is None else "FAILED")
-        if not res or any(err for _, err in res):
-            raise SystemExit(1)
-        return
-
-    import os
-    cards, problems = parse_watchlist(os.environ.get("WATCHLIST", ""))
+    cards, problems = parse_watchlist(load_watchlist_text(args.watchlist))
     for prob in problems:
         log.warning("watchlist %s", prob)
+    if args.hello:
+        hello(cards, problems)
     if not cards:
-        raise SystemExit("WATCHLIST is empty. Add it under Settings > Secrets and variables > Actions > Variables.")
+        log.info("Watchlist is empty, nothing to check.")
+        return
     if not notify.channels():
         log.warning("No alert channel configured (Telegram or email secrets).")
 

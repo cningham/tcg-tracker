@@ -32,7 +32,7 @@ class Ebay:
         if self._token and time.time() < self._token_expires - 60:
             return self._token
         if not (self.client_id and self.client_secret):
-            raise EbayError("EBAY_CLIENT_ID / EBAY_CLIENT_SECRET are not set in .env")
+            raise EbayError("EBAY_CLIENT_ID / EBAY_CLIENT_SECRET are not set")
         basic = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
         r = self.http.post(
             f"{self.api}/identity/v1/oauth2/token",

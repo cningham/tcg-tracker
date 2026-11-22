@@ -5,12 +5,12 @@ on:
     # Every 30 minutes. Each run keeps checking every 5 minutes for ~28 minutes,
     # so checks stay frequent even when GitHub starts a scheduled run late.
     - cron: "7,37 * * * *"
+  # Pressing "Run workflow", or changing the watchlist, sends a Telegram
+  # message confirming the tracker works and which cards it's watching.
   workflow_dispatch:
-    inputs:
-      test_alert:
-        description: "Only send a test alert"
-        type: boolean
-        default: false
+  push:
+    branches: [main]
+    paths: ["watchlist.txt", ".github/workflows/watch.yml", "tracker/**"]
 
 # One run at a time; a new run waits for the previous one to finish.
 concurrency:
@@ -25,7 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      WATCHLIST: ${{ vars.WATCHLIST || secrets.WATCHLIST }}
       EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
       EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -33,6 +32,8 @@ jobs:
       SMTP_USER: ${{ secrets.SMTP_USER }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      # Optional: a WATCHLIST secret overrides watchlist.txt (keeps the list private).
+      WATCHLIST: ${{ secrets.WATCHLIST }}
       EBAY_ITEM_LOCATION: ${{ vars.EBAY_ITEM_LOCATION }}
       AUCTION_WINDOW_MINUTES: ${{ vars.AUCTION_WINDOW_MINUTES || '10' }}
     steps:
@@ -44,12 +45,7 @@ jobs:
 
       - run: pip install --quiet requests python-dotenv
 
-      - name: Send test alert
-        if: ${{ inputs.test_alert }}
-        run: python -m tracker.cloud --test-alert
-
       - name: Restore list of listings already alerted
-        if: ${{ !inputs.test_alert }}
         uses: actions/cache/restore@v4
         with:
           path: state
@@ -57,11 +53,10 @@ jobs:
           restore-keys: seen-
 
       - name: Check eBay
-        if: ${{ !inputs.test_alert }}
-        run: python -m tracker.cloud --minutes ${{ github.event_name == 'schedule' && '28' || '0' }} --every 5
+        run: python -m tracker.cloud ${{ github.event_name == 'schedule' && '--minutes 28 --every 5' || '--hello' }}
 
       - name: Save list of listings already alerted
-        if: ${{ always() && !inputs.test_alert }}
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: state

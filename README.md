@@ -28,7 +28,8 @@ In the repo, go to **Settings → Secrets and variables → Actions**.
 **Secrets** tab, **New repository secret** for each one you use:
 `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_TO`
 
-**Variables** tab, **New repository variable** named `WATCHLIST`, one card per line:
+### 3. Your watchlist
+Edit **`watchlist.txt`** in the repo (pencil icon on GitHub, works from the phone app too). One card per line:
 
 ```
 Charizard ex 199 | 50 | must: 199/165 | not: japanese, jumbo
@@ -41,14 +42,15 @@ Each line is `eBay search words | max £ including postage | options`. The optio
 - `not: x, y`: skip titles containing any of these.
 - `bin-only`: ignore auctions for this card.
 
-To change your watchlist later, edit that variable (it works from the GitHub mobile app or the website). The next run picks it up.
+Every time you save it, you get a Telegram message listing what's being watched.
+Note the file is public. To keep the list private, put the same text in a `WATCHLIST` secret instead; it takes priority over the file.
 
-### 3. Turn it on
-Go to the **Actions** tab, enable workflows if asked, open **Watch eBay**, and press **Run workflow** with
-"Only send a test alert" ticked. You should get a Telegram message (and an email if set up).
+### 4. Check it works
+Go to the **Actions** tab, enable workflows if asked, open **Watch eBay**, and press **Run workflow**.
+You should get a Telegram message saying the eBay connection is OK and listing your cards.
 After that it runs by itself every 30 minutes, checking every 5.
 
-Optional variables: `EBAY_ITEM_LOCATION` (e.g. `GB` for UK sellers only) and `AUCTION_WINDOW_MINUTES` (default 10).
+Optional repository variables: `EBAY_ITEM_LOCATION` (e.g. `GB` for UK sellers only) and `AUCTION_WINDOW_MINUTES` (default 10).
 
 ## Run it on your PC instead (Windows)
 

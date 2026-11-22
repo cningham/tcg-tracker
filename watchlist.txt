@@ -1,0 +1,11 @@
+# Cards to watch. One per line:
+#   eBay search words | max £ including postage | options
+#
+# Options (optional):
+#   must: a, b     listing title must contain all of these (e.g. the card number)
+#   not: x, y      skip listings whose title contains any of these
+#   bin-only       ignore auctions for this card
+#
+# Lines starting with # are ignored. Examples:
+# Charizard ex 199 | 50 | must: 199/165 | not: japanese
+# Johnny Silverhand | 8 | bin-only
