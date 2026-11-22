@@ -124,7 +124,13 @@ def hello(cards, problems):
         lines.append("eBay connection: OK")
     except Exception as e:
         ok = False
-        lines.append(f"eBay connection: FAILED ({e})"[:300])
+        err = str(e)
+        if "invalid_client" in err:
+            err = ("eBay rejected the keys. Check EBAY_CLIENT_ID is the App ID and "
+                   "EBAY_CLIENT_SECRET is the Cert ID, both from the Production keyset "
+                   "(not Sandbox), with no spaces.")
+        log.info("eBay error: %s", err[:300])
+        lines.append(f"eBay connection: FAILED. {err}"[:400])
     if cards:
         lines.append(f"Watching {len(cards)} card(s):")
         for c in cards:
