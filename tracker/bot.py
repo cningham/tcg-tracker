@@ -60,9 +60,11 @@ def register_commands():
     ])
 
 
-def reply(text):
-    _api("sendMessage", chat_id=config.TELEGRAM_CHAT_ID, text=text,
-         disable_web_page_preview=True)
+def reply(text, html=False):
+    params = dict(chat_id=config.TELEGRAM_CHAT_ID, text=text, disable_web_page_preview=True)
+    if html:
+        params["parse_mode"] = "HTML"
+    _api("sendMessage", **params)
 
 
 # -- watchlist file -------------------------------------------------------
@@ -355,9 +357,10 @@ def market(ebay, arg, lines):
         if m["item_id"] not in seen:
             seen.add(m["item_id"])
             unique.append(m)
+    from html import escape
     if not unique:
-        return (f"No raw listings on eBay for \"{query}\" right now.\n"
-                "If that seems wrong, try a shorter name, e.g. /market Scyther 003/106")
+        return escape(f"No raw listings on eBay for \"{query}\" right now.\n"
+                      "If that seems wrong, try a shorter name, e.g. /market Scyther 003/106")
     head = (f"eBay now for \"{query}\": {len(unique)} listing(s)"
             + (", 10 cheapest:" if len(unique) > 10 else ":"))
     rows = []
@@ -369,9 +372,11 @@ def market(ebay, arg, lines):
         else:
             what = "Buy It Now"
         title = m["title"] if len(m["title"]) <= 70 else m["title"][:67] + "..."
-        rows.append(f"{n}. £{m['total']:.2f}{post} · {what}\n    {title}")
-    note = "\n\nTotals include postage to the UK. Graded slabs are left out."
-    return head + "\n" + "\n".join(rows) + note
+        link = (f'<a href="{escape(m["url"], quote=True)}">{escape(title)}</a>'
+                if m.get("url", "").startswith("https://") else escape(title))
+        rows.append(f"{n}. £{m['total']:.2f}{escape(post)} · {escape(what)}\n    {link}")
+    note = "\n\nTotals include postage to the UK. Graded slabs are left out. Tap a title to open it on eBay."
+    return escape(head) + "\n" + "\n".join(rows) + note
 
 
 class Bot:
@@ -411,7 +416,7 @@ class Bot:
                 cmd, _, arg = text.strip().partition(" ")
                 if cmd.lower().split("@")[0] in ("/market", "/m", "/prices"):
                     self.state.pop("pending", None)
-                    reply(market(self.ebay, arg, before) if self.ebay else "eBay isn't connected.")
+                    reply(market(self.ebay, arg, before) if self.ebay else "eBay isn't connected.", html=True)
                     continue
                 answer, new_lines = handle(text, before, self.state)
                 self._save_state()
