@@ -88,7 +88,7 @@ def check_all(ebay, cards, seen):
             kinds.append(("AUCTION", config.AUCTION_WINDOW_MINUTES))
         for kind, window in kinds:
             try:
-                results = ebay.search(card["query"], card["max_price"], kind=kind,
+                results = ebay.search(tgbot.search_words(card["query"]), card["max_price"], kind=kind,
                                       ending_within_minutes=window)
             except Exception as e:
                 errors += 1
@@ -167,7 +167,8 @@ def main(argv=None):
     # Keep third-party libraries from logging URLs (which can contain tokens).
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    bot = tgbot.Bot(args.watchlist)
+    ebay = Ebay()
+    bot = tgbot.Bot(args.watchlist, ebay=ebay)
     if not args.hello:
         bot.poll(0)  # apply any commands sent while no run was active
 
@@ -187,7 +188,6 @@ def main(argv=None):
 
     Path(args.seen).parent.mkdir(parents=True, exist_ok=True)
     seen = load_seen(args.seen)
-    ebay = Ebay()
     deadline = time.time() + args.minutes * 60
     passes = 0
     while True:

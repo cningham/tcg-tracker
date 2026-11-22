@@ -31,6 +31,7 @@ In the repo, go to **Settings → Secrets and variables → Actions**.
 ### 3. Your watchlist (from Telegram)
 Message your bot:
 
+- **Share a card from Collectr** to the bot, then reply with your max price (e.g. `25`). Or add the price straight after the link.
 - `/add Charizard ex 199/165 50` watches Charizard ex 199/165 for up to £50 including postage. Add `bin` at the end to skip auctions.
 - `/list` shows your cards with numbers.
 - `/remove 2` stops watching card 2.
