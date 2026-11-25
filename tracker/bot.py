@@ -31,7 +31,8 @@ HELP = (
     "/market 2  (10 cheapest eBay listings for card 2, any price; or /market + a name or Collectr link)\n"
     "/remove 2  (stop watching card 2)\n"
     "/price 2 45  (change card 2's max to £45)\n"
-    "/condition 2 NM  (card 2: Near Mint only. Also EX, VG or any)\n\n"
+    "/condition 2 NM  (card 2: Near Mint only. Also EX, VG or any)\n"
+    "Use 'all' instead of a number to change every card, e.g. /condition all EX\n\n"
     "Add 'bin' at the end of /add to skip auctions, and NM/EX/VG for a minimum condition, "
     "e.g. /add Pikachu 025/165 12 bin NM"
 )
@@ -295,47 +296,62 @@ def handle(text, lines, state=None):
             out.append("\nNote: a WATCHLIST secret is set on GitHub, and it overrides this list.")
         return "\n".join(out), None
 
-    if cmd in ("/remove", "/delete"):
+    def targets(arg):
+        """'2' -> [line index of card 2]; 'all' -> every card. None if invalid."""
+        arg = arg.strip().lower()
+        if arg in ("all", "*", "everything"):
+            return list(idx) or None
         try:
-            n = int(rest.strip())
-            i = idx[n - 1]
-            assert n >= 1
-        except (ValueError, IndexError, AssertionError):
-            return "Which card? Send /list to see the numbers, then e.g. /remove 2", None
-        removed = lines.pop(i)
-        return f"Stopped watching: {describe(removed)}", lines
+            n = int(arg)
+            return [idx[n - 1]] if n >= 1 else None
+        except (ValueError, IndexError):
+            return None
+
+    def numbered(changed):
+        return "\n".join(f"{idx.index(i) + 1}. {describe(lines[i])}" for i in changed)
+
+    if cmd in ("/remove", "/delete"):
+        which = targets(rest)
+        if not which:
+            return "Which card? Send /list to see the numbers, then e.g. /remove 2 (or /remove all)", None
+        removed = [describe(lines[i]) for i in which]
+        for i in sorted(which, reverse=True):
+            lines.pop(i)
+        if len(removed) == 1:
+            return f"Stopped watching: {removed[0]}", lines
+        return f"Stopped watching all {len(removed)} cards.", lines
 
     if cmd == "/price":
         try:
             n_s, p_s = rest.split()
-            n, price = int(n_s), float(p_s.replace("£", ""))
-            i = idx[n - 1]
-            assert n >= 1
-        except (ValueError, IndexError, AssertionError):
-            return "Send it like /price 2 45 (card 2, new max £45). /list shows the numbers.", None
-        parts = [p.strip() for p in lines[i].split("|")]
-        parts[1] = f"{price:g}"
-        lines[i] = " | ".join(parts)
-        return f"Updated: {describe(lines[i])}", lines
+            price = float(p_s.replace("£", ""))
+        except ValueError:
+            n_s = None
+        which = targets(n_s) if n_s else None
+        if not which:
+            return "Send it like /price 2 45 (card 2, new max £45), or /price all 45. /list shows the numbers.", None
+        for i in which:
+            parts = [p.strip() for p in lines[i].split("|")]
+            parts[1] = f"{price:g}"
+            lines[i] = " | ".join(parts)
+        return "Updated:\n" + numbered(which), lines
 
     if cmd in ("/condition", "/min", "/cond"):
         from .condition import SHORT, parse_level
         args = rest.split(None, 1)
-        try:
-            n = int(args[0])
-            i = idx[n - 1]
-            assert n >= 1
-            lvl = parse_level(args[1])
-            assert lvl is not None
-        except (ValueError, IndexError, AssertionError):
-            return ("Send it like /condition 2 NM (card 2, Near Mint only).\n"
+        which = targets(args[0]) if args else None
+        lvl = parse_level(args[1]) if len(args) > 1 else None
+        if not which or lvl is None:
+            return ("Send it like /condition 2 NM (card 2, Near Mint only), or /condition all EX for every card.\n"
                     "Options: NM, EX (excellent/lightly played), VG (very good/played), any."), None
-        parts = [p.strip() for p in lines[i].split("|") if not p.strip().lower().startswith("min:")]
-        if lvl:
-            parts.append(f"min: {SHORT[lvl]}")
-        lines[i] = " | ".join(parts)
+        for i in which:
+            parts = [p.strip() for p in lines[i].split("|") if not p.strip().lower().startswith("min:")]
+            if lvl:
+                parts.append(f"min: {SHORT[lvl]}")
+            lines[i] = " | ".join(parts)
         what = f"only {SHORT[lvl]} or better" if lvl else "any condition"
-        return f"Card {n} now alerts for {what}: {describe(lines[i])}", lines
+        who = "All cards now alert" if len(which) > 1 else f"Card {idx.index(which[0]) + 1} now alerts"
+        return f"{who} for {what}:\n" + numbered(which), lines
 
     return HELP, None
 

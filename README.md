@@ -37,6 +37,7 @@ Message your bot:
 - `/market 2` shows the 10 cheapest eBay listings for card 2 right now, at any price. You can also use `/market Scyther 003/106` or `/market` plus a Collectr link.
 - `/remove 2` stops watching card 2.
 - `/price 2 45` changes card 2's max to £45.
+- Use `all` instead of a card number to change every card at once: `/condition all EX`, `/price all 30`, `/remove all`.
 - `/condition 2 NM` only alerts for card 2 in Near Mint. Also `EX` (excellent / lightly played), `VG` (very good / played) or `any`.
   Condition comes from eBay's "Card Condition" field, or the title if that's missing. Listings that don't state a condition still come through, marked "not stated".
 
