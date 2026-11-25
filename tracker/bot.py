@@ -30,8 +30,10 @@ HELP = (
     "/list  (show your cards)\n"
     "/market 2  (10 cheapest eBay listings for card 2, any price; or /market + a name or Collectr link)\n"
     "/remove 2  (stop watching card 2)\n"
-    "/price 2 45  (change card 2's max to £45)\n\n"
-    "Add 'bin' at the end of /add to skip auctions, e.g. /add Pikachu 025/165 12 bin"
+    "/price 2 45  (change card 2's max to £45)\n"
+    "/condition 2 NM  (card 2: Near Mint only. Also EX, VG or any)\n\n"
+    "Add 'bin' at the end of /add to skip auctions, and NM/EX/VG for a minimum condition, "
+    "e.g. /add Pikachu 025/165 12 bin NM"
 )
 
 NUMBER = re.compile(r"^#?(\w*\d+)/(\w*\d+)$")   # 199/165, TG12/TG30, #025/198
@@ -56,6 +58,7 @@ def register_commands():
         {"command": "market", "description": "Cheapest listings now: /market 2 or /market Scyther 003/106"},
         {"command": "remove", "description": "Stop watching a card: /remove 2"},
         {"command": "price", "description": "Change a max price: /price 2 45"},
+        {"command": "condition", "description": "Minimum condition: /condition 2 NM (or EX, VG, any)"},
         {"command": "help", "description": "How to use me"},
     ])
 
@@ -83,10 +86,18 @@ def card_lines(lines):
 
 def line_for_add(text):
     """'/add Charizard ex 199/165 50 bin' -> 'Charizard ex 199 | 50 | must: 199/165 | bin-only'"""
+    from .condition import SHORT, parse_level
     words = text.split()
     bin_only = False
-    if words and words[-1].lower() in ("bin", "bin-only", "buyitnow"):
-        bin_only = True
+    min_cond = None
+    while words:
+        last = words[-1].lower()
+        if last in ("bin", "bin-only", "buyitnow"):
+            bin_only = True
+        elif last in ("nm", "ex", "lp", "vg", "mp", "poor") and len(words) > 2:
+            min_cond = parse_level(last)
+        else:
+            break
         words = words[:-1]
     if len(words) < 2:
         return None, "Tell me the card and a max price, e.g. /add Charizard ex 199/165 50"
@@ -113,6 +124,8 @@ def line_for_add(text):
         parts.append(f"must: {must}")
     if bin_only:
         parts.append("bin-only")
+    if min_cond:
+        parts.append(f"min: {SHORT[min_cond]}")
     return " | ".join(parts), None
 
 
@@ -211,7 +224,8 @@ def _price_from(text):
 def describe(line):
     parts = [p.strip() for p in line.split("|")]
     text = f"{parts[0]}: up to £{float(parts[1]):.2f}" if len(parts) > 1 else line
-    extras = [p for p in parts[2:] if p and not p.lower().startswith("collectr:")]
+    extras = [p.replace("min:", "min condition:") for p in parts[2:]
+              if p and not p.lower().startswith("collectr:")]
     return text + (f" ({', '.join(extras)})" if extras else "")
 
 
@@ -303,6 +317,25 @@ def handle(text, lines, state=None):
         parts[1] = f"{price:g}"
         lines[i] = " | ".join(parts)
         return f"Updated: {describe(lines[i])}", lines
+
+    if cmd in ("/condition", "/min", "/cond"):
+        from .condition import SHORT, parse_level
+        args = rest.split(None, 1)
+        try:
+            n = int(args[0])
+            i = idx[n - 1]
+            assert n >= 1
+            lvl = parse_level(args[1])
+            assert lvl is not None
+        except (ValueError, IndexError, AssertionError):
+            return ("Send it like /condition 2 NM (card 2, Near Mint only).\n"
+                    "Options: NM, EX (excellent/lightly played), VG (very good/played), any."), None
+        parts = [p.strip() for p in lines[i].split("|") if not p.strip().lower().startswith("min:")]
+        if lvl:
+            parts.append(f"min: {SHORT[lvl]}")
+        lines[i] = " | ".join(parts)
+        what = f"only {SHORT[lvl]} or better" if lvl else "any condition"
+        return f"Card {n} now alerts for {what}: {describe(lines[i])}", lines
 
     return HELP, None
 
@@ -403,21 +436,39 @@ def market(ebay, arg, lines):
             log.warning("market search failed: %s", type(e).__name__)
             return "Sorry, eBay didn't answer. Try again in a minute."
     found = [m for m in found if not checker.reject_reason(card, m)]
-    seen, unique = set(), []
+    from .condition import SHORT, ConditionChecker
+    conds = ConditionChecker(ebay)
+    min_cond = card.get("min_condition") or 0
+    seen, unique, shown = set(), [], []
     for m in sorted(found, key=lambda m: m["total"]):
         if m["item_id"] not in seen:
             seen.add(m["item_id"])
             unique.append(m)
+    # Look up condition for the cheapest ones until there are 10 to show.
+    skipped = 0
+    for m in unique:
+        if len(shown) >= 10:
+            break
+        lvl, source = conds.level(m)
+        if min_cond and lvl and lvl < min_cond:
+            skipped += 1
+            continue
+        m["cond_short"] = (SHORT[lvl] + ("?" if source == "title" else "")) if lvl else "cond. ?"
+        shown.append(m)
+    total = len(unique) - skipped if len(shown) < 10 else None
+    if not shown:
+        unique = []
     from html import escape
     if not unique:
         return escape((f"{top}\n\n" if top else "") + f"No raw listings on eBay for \"{query}\" right now.\n"
                       "If that seems wrong, try a shorter name, e.g. /market Scyther 003/106")
-    head = (f"eBay now for \"{query}\": {len(unique)} listing(s)"
-            + (", 10 cheapest:" if len(unique) > 10 else ":"))
+    cond_note = f", {SHORT[min_cond]} or better" if min_cond else ""
+    head = (f"eBay now for \"{query}\"{cond_note}: "
+            + (f"{total} listing(s):" if total is not None else "10 cheapest:"))
     if top:
         head = f"{top}\n\n{head}"
     rows = []
-    for n, m in enumerate(unique[:10], 1):
+    for n, m in enumerate(shown, 1):
         post = "" if m["postage"] is None else (" free post" if m["postage"] == 0 else f" incl. £{m['postage']:.2f} post")
         if m["kind"] == "AUCTION":
             bids = f", {m['bids']} bids" if m.get("bids") is not None else ""
@@ -427,8 +478,9 @@ def market(ebay, arg, lines):
         title = m["title"] if len(m["title"]) <= 70 else m["title"][:67] + "..."
         link = (f'<a href="{escape(m["url"], quote=True)}">{escape(title)}</a>'
                 if m.get("url", "").startswith("https://") else escape(title))
-        rows.append(f"{n}. £{m['total']:.2f}{escape(post)} · {escape(what)}\n    {link}")
-    note = "\n\nTotals include postage to the UK. Graded slabs are left out. Tap a title to open it on eBay."
+        rows.append(f"{n}. £{m['total']:.2f}{escape(post)} · {escape(what)} · {escape(m['cond_short'])}\n    {link}")
+    note = ("\n\nTotals include postage to the UK. Graded slabs are left out. Tap a title to open it on eBay.\n"
+            "Condition: NM near mint, EX excellent, VG very good. ? = guessed from the title or not stated.")
     return escape(head) + "\n" + "\n".join(rows) + note
 
 

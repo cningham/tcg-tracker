@@ -56,6 +56,13 @@ def parse_watchlist(text):
                 card["must_include"] = val.strip()
             elif key in ("not", "exclude", "must not"):
                 card["exclude"] = val.strip()
+            elif key in ("min", "min condition", "condition"):
+                from .condition import parse_level
+                lvl = parse_level(val)
+                if lvl is None:
+                    errors.append(f"line {n}: unknown condition")
+                else:
+                    card["min_condition"] = lvl
             elif key == "collectr":
                 card["collectr"] = val.strip()
             elif key in ("bin-only", "bin only", "no auctions"):
@@ -81,8 +88,10 @@ def save_seen(path, seen):
     Path(path).write_text(json.dumps(seen))
 
 
-def check_all(ebay, cards, seen):
+def check_all(ebay, cards, seen, conditions=None):
     """One pass over all cards. Returns (alerts sent, errors)."""
+    from .condition import ConditionChecker, label
+    conditions = conditions or ConditionChecker(ebay)
     alerts = errors = 0
     for card in cards:
         kinds = [("FIXED_PRICE", None)]
@@ -100,6 +109,10 @@ def check_all(ebay, cards, seen):
                 key = f"{card['key']}|{m['item_id']}"
                 if key in seen or checker.reject_reason(card, m):
                     continue
+                lvl, source = conditions.level(m)
+                if card.get("min_condition") and lvl and lvl < card["min_condition"]:
+                    continue  # worse than the card's minimum condition
+                m["condition_label"] = label(lvl, source)
                 subject, body = notify.format_alert(card, m)
                 notify.send(subject, body)
                 seen[key] = time.time()
@@ -190,15 +203,18 @@ def main(argv=None):
 
     Path(args.seen).parent.mkdir(parents=True, exist_ok=True)
     seen = load_seen(args.seen)
+    from .condition import ConditionChecker
+    conditions = ConditionChecker(ebay)
     deadline = time.time() + args.minutes * 60
     passes = 0
     while True:
         started = time.time()
         if cards:
-            alerts, errors = check_all(ebay, cards, seen)
+            alerts, errors = check_all(ebay, cards, seen, conditions)
             save_seen(args.seen, seen)
             passes += 1
-            log.info("pass %d: %d card(s), %d alert(s), %d error(s)", passes, len(cards), alerts, errors)
+            log.info("pass %d: %d card(s), %d alert(s), %d error(s), conditions looked up: %s",
+                     passes, len(cards), alerts, errors, conditions.stats or "none")
         else:
             log.info("Watchlist is empty, nothing to check.")
         next_at = started + args.every * 60
@@ -211,7 +227,7 @@ def main(argv=None):
                 cards, _ = parse_watchlist(load_watchlist_text(args.watchlist))
                 fresh = [c for c in cards if c["key"] not in old_keys]
                 if fresh:  # check newly added cards straight away
-                    check_all(ebay, fresh, seen)
+                    check_all(ebay, fresh, seen, conditions)
                     save_seen(args.seen, seen)
             elif not tgbot.enabled():
                 time.sleep(max(0, next_at - time.time()))

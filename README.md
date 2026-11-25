@@ -37,6 +37,8 @@ Message your bot:
 - `/market 2` shows the 10 cheapest eBay listings for card 2 right now, at any price. You can also use `/market Scyther 003/106` or `/market` plus a Collectr link.
 - `/remove 2` stops watching card 2.
 - `/price 2 45` changes card 2's max to £45.
+- `/condition 2 NM` only alerts for card 2 in Near Mint. Also `EX` (excellent / lightly played), `VG` (very good / played) or `any`.
+  Condition comes from eBay's "Card Condition" field, or the title if that's missing. Listings that don't state a condition still come through, marked "not stated".
 
 The bot answers within a few seconds while a check is running, which is most of the time. Otherwise it answers within about 30 minutes.
 Changes are saved to `watchlist.txt` in the repo, which you can also edit by hand (format: `search words | max £ | must: 199/165 | not: japanese | bin-only`).

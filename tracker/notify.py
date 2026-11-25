@@ -42,7 +42,8 @@ def format_alert(card, m):
     else:
         what = "Buy It Now"
     subject = f"{card['name']}: {sym}{m['total']:.2f} (max {sym}{card['max_price']:.2f})"
-    body = (f"{subject}\n{what}, {postage}\n{m['title']}\n{m['url']}")
+    cond = f"\nCondition: {m['condition_label']}" if m.get("condition_label") else ""
+    body = (f"{subject}\n{what}, {postage}{cond}\n{m['title']}\n{m['url']}")
     return subject, body
 
 

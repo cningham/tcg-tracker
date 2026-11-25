@@ -94,6 +94,19 @@ class Ebay:
         return [normalise(i, kind) for i in r.json().get("itemSummaries", [])]
 
 
+    def item(self, item_id):
+        """Full details for one listing (used for card condition)."""
+        from .condition import item_path
+        headers = {
+            "Authorization": f"Bearer {self._get_token()}",
+            "X-EBAY-C-MARKETPLACE-ID": config.EBAY_MARKETPLACE,
+        }
+        r = self.http.get(f"{self.api}{item_path(item_id)}", headers=headers, timeout=30)
+        if r.status_code != 200:
+            raise EbayError(f"eBay item lookup failed ({r.status_code})")
+        return r.json()
+
+
 def _money(obj):
     if not obj:
         return None
