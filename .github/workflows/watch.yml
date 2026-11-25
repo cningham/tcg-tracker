@@ -6,8 +6,8 @@ on:
     # itself (last step). GitHub's schedule is unreliable, so it's only a backup
     # that restarts the chain if it ever stops.
     - cron: "7,37 * * * *"
-  # Pressing "Run workflow", or changing the watchlist, sends a Telegram
-  # message confirming the tracker works and which cards it's watching.
+  # Pressing "Run workflow" sends a silent Telegram check-in. Code or watchlist
+  # pushes only send a message if something is wrong.
   workflow_dispatch:
     inputs:
       mode:
@@ -61,7 +61,7 @@ jobs:
           restore-keys: seen-
 
       - name: Check eBay
-        run: python -m tracker.cloud ${{ (github.event_name == 'schedule' || inputs.mode == 'watch') && '--minutes 28 --every 5' || '--hello' }}
+        run: python -m tracker.cloud ${{ (github.event_name == 'schedule' || inputs.mode == 'watch') && '--minutes 28 --every 5' || (github.event_name == 'push' && '--hello --quiet' || '--hello') }}
 
       - name: Save list of listings already alerted
         if: always()

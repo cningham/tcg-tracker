@@ -47,10 +47,11 @@ def format_alert(card, m):
     return subject, body
 
 
-def send_telegram(text):
+def send_telegram(text, silent=False):
     r = requests.post(
         f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "disable_web_page_preview": False},
+        json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "disable_web_page_preview": False,
+              "disable_notification": silent},
         timeout=20,
     )
     if r.status_code != 200:
@@ -69,13 +70,13 @@ def send_email(subject, body):
         s.send_message(msg)
 
 
-def send(subject, body):
+def send(subject, body, silent=False):
     """Send to every configured channel. Returns list of (channel, error or None)."""
     results = []
     for ch in channels():
         try:
             if ch == "telegram":
-                send_telegram(body)
+                send_telegram(body, silent=silent)
             else:
                 send_email(subject, body)
             results.append((ch, None))

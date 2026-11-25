@@ -131,7 +131,7 @@ def load_watchlist_text(path="watchlist.txt"):
         return ""
 
 
-def hello(cards, problems):
+def hello(cards, problems, quiet=False):
     """Confirm the setup works: test eBay, then send a Telegram/email summary."""
     lines = ["TCG Tracker check-in."]
     ok = True
@@ -157,7 +157,11 @@ def hello(cards, problems):
     lines.append("To add a card, send me e.g.: /add Charizard ex 199/165 50\nSend /help for all commands.")
     for prob in problems:
         lines.append(f"Watchlist problem, {prob}")
-    res = notify.send("Tracker is set up", "\n".join(lines))
+    if quiet and ok and not problems:
+        log.info("eBay connection: OK (no check-in message sent)")
+        return
+    # Check-ins arrive silently (no sound/buzz) unless something is wrong.
+    res = notify.send("Tracker is set up", "\n".join(lines), silent=ok and not problems)
     for ch, err in res:
         log.info("%s: %s", ch, "sent" if err is None else f"FAILED: {err[:200]}")
     if not res:
@@ -175,6 +179,8 @@ def main(argv=None):
                    help="minutes between checks")
     p.add_argument("--seen", default="state/seen.json")
     p.add_argument("--watchlist", default="watchlist.txt")
+    p.add_argument("--quiet", action="store_true",
+                   help="with --hello: only message if something is wrong")
     p.add_argument("--hello", action="store_true",
                    help="send a setup confirmation, then check once")
     args = p.parse_args(argv)
@@ -191,7 +197,7 @@ def main(argv=None):
     for prob in problems:
         log.warning("watchlist %s", prob)
     if args.hello:
-        hello(cards, problems)
+        hello(cards, problems, quiet=args.quiet)
         try:
             tgbot.register_commands()
         except Exception as e:
